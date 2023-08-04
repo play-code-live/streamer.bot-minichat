@@ -17,46 +17,81 @@ using System.Threading.Tasks;
 ///----------------------------------------------------------------------------
 public class CPHInline
 {
+    private readonly Dictionary<string, string[]> prebuildEvents = new Dictionary<string, string[]>
+    {
+        {
+            "VKPlay",
+            new string[]
+            {
+                "Message",
+                "Follow",
+                "UnFollow",
+                "Subscription",
+                "Raid",
+            }
+        },
+        {
+            "Boosty",
+            new string[]
+            {
+                "Message",
+                "Follow",
+                "UnFollow",
+                "Subscription",
+                "GiftSubscription",
+            }
+        },
+        {
+            "Trovo",
+            new string[]
+            {
+                "Message",
+                "Follow",
+                "UnFollow",
+                "Subscription",
+                "GiftSubscription",
+                "Reward",
+                "Raid",
+            }
+        },
+        {
+            "VK",
+            new string[]
+            {
+                "Message",
+                "Follow",
+                "UnFollow",
+                "Subscription",
+            }
+        },
+        {
+            "WASD",
+            new string[]
+            {
+                "Message",
+                "Follow",
+                "UnFollow",
+                "Subscription",
+            }
+        },
+    };
+
     private PrefixedLogger Logger { get; set; }
 
     private SocketService Socket { get; set; }
     private ApiService ApiService { get; set; }
 
     private const string keyEventCollection = "minichat.eventCollection";
+    private const string keyRewardEventCollection = "minichat.rewardEventCollection";
+    private const string keyConnectionPort = "minichat.connection.port";
 
     public void Init()
     {
+        int Port = CPH.GetGlobalVar<int>(keyConnectionPort);
+        Port = Port == 0 ? SocketService.DefaultPort : Port;
         Logger = new PrefixedLogger(CPH);
-        Socket = new SocketService(new EventObserver(), Logger);
-        ApiService = new ApiService(Logger);
-
-        var prebuildEvents = new Dictionary<string, string[]>()
-        {
-            { 
-                "VKPlay", 
-                new string[] 
-                {
-                    "Follow",
-                    "Subscription",
-                } 
-            },
-            {
-                "Boosty",
-                new string[]
-                {
-                    "Follow",
-                }
-            },
-            {
-                "Trovo",
-                new string[]
-                {
-                    "Follow",
-                    "Subscription",
-                    "Raid",
-                }
-            }
-        };
+        Socket = new SocketService(new EventObserver(), Logger, Port);
+        ApiService = new ApiService(Logger, Port);
 
         foreach (var eventGroup in prebuildEvents)
         {
@@ -68,11 +103,17 @@ public class CPHInline
 
         // Allows us not to add each event manually, but catch and memorize it on the fly
         LoadAndRegisterCustomEvents();
+        LoadAndRegisterCustomRewardEvents();
     }
 
     public void Dispatch()
     {
         Socket.Close();
+    }
+
+    public bool Execute()
+    {
+        return IntegrationLoop();
     }
 
     public bool Speak()
@@ -84,7 +125,7 @@ public class CPHInline
         }
 
         string message = args["message"].ToString();
-        string voice = ApiService.Voice.Alice;
+        string voice = ApiService.availableVoices[0];
         if (args.ContainsKey("voice"))
             voice = args["voice"].ToString();
 
@@ -93,23 +134,106 @@ public class CPHInline
         return true;
     }
 
-    public bool Execute()
+    public bool SendMessageSystem()
+    {
+        return sendMessage("MiniChat");
+    }
+
+    public bool SendMessageGoodGame()
+    {
+        return sendMessage("GoodGame");
+    }
+
+    public bool SendMessageVK()
+    {
+        return sendMessage("VK");
+    }
+
+    public bool SendMessageWASD()
+    {
+        return sendMessage("WASD");
+    }
+
+    public bool SendMessageSteam()
+    {
+        return sendMessage("Steam");
+    }
+
+    public bool SendMessageFacebook()
+    {
+        return sendMessage("Facebook");
+    }
+
+    public bool SendMessageOK()
+    {
+        return sendMessage("OK");
+    }
+
+    public bool SendMessageTrovo()
+    {
+        return sendMessage("Trovo");
+    }
+
+    public bool SendMessageRutube()
+    {
+        return sendMessage("Rutube");
+    }
+
+    public bool SendMessageTelegram()
+    {
+        return sendMessage("Telegram");
+    }
+
+    public bool SendMessageVkPlay()
+    {
+        return sendMessage("VKPlay");
+    }
+
+    public bool SendMessageBoosty()
+    {
+        return sendMessage("Boosty");
+    }
+
+    private bool sendMessage(string service)
+    {
+        if (!args.ContainsKey("message"))
+        {
+            Logger.Error("Message argument is required for the speech");
+            return false;
+        }
+        string message = args["message"].ToString();
+
+        return sendMessage(service, message);
+    }
+
+    private bool sendMessage(string service, string message)
+    {
+        string username = args.ContainsKey("broadcastUserName") ? args["broadcastUserName"].ToString() : "System";
+
+        ApiService.SendMessage(message, service, username);
+
+        return true;
+    }
+
+    private bool IntegrationLoop()
     {
         Socket
-            .On(SocketService.eventRecieved, delegate (string Event, Dictionary<string, string> Data)
+            .On(SocketService.eventMessageEventRecieved, delegate (string Event, Dictionary<string, object> Data)
             {
                 var jsonData = JsonConvert.SerializeObject(Data);
-                if (!Data.ContainsKey("Service") || !Data.ContainsKey("Type"))
+                if (!Data.ContainsKey("Service") || !Data.ContainsKey("Message") || !Data.ContainsKey("UserName"))
                 {
-                    Logger.Error("Wrong event structure. Service and Type are required", jsonData);
+                    Logger.Error("Wrong event structure. Service, Message and UserName are required", jsonData);
                     return;
                 }
-                string service = Data["Service"];
-                string type = Data["Type"];
 
-                // These two are the most important and stable
-                CPH.SetArgument("userName", Data["UserName"]);
-                CPH.SetArgument("user", Data["UserName"]);
+                string service = Data["Service"].ToString();
+                string message = Data["Message"].ToString();
+                string user = Data["UserName"].ToString();
+
+                CPH.SetArgument("userName", user);
+                CPH.SetArgument("user", user);
+                CPH.SetArgument("message", message);
 
                 // Register the rest of parameters
                 foreach (var datum in Data)
@@ -117,19 +241,79 @@ public class CPHInline
                     CPH.SetArgument(string.Format("minichat.{0}", datum.Key), datum.Value);
                 }
 
+                EnsureCustomEventRegistered(service, "Message");
+                TriggerCustomEvent(service, "Message");
+            })
+            .On(SocketService.eventRewardEventRecieved, delegate (string Event, Dictionary<string, object> Data)
+            {
+                var jsonData = JsonConvert.SerializeObject(Data);
+                if (!Data.ContainsKey("Service") || !Data.ContainsKey("RewardName") || !Data.ContainsKey("UserName"))
+                {
+                    Logger.Error("Wrong event structure. Service, RewardName and UserName are required", jsonData);
+                    return;
+                }
+
+                string service = Data["Service"].ToString();
+                string rewardName = Data["RewardName"].ToString();
+                string user = Data["UserName"].ToString();
+                string input = Data["RewardInput"].ToString();
+
+                CPH.SetArgument("userName", user);
+                CPH.SetArgument("user", user);
+                CPH.SetArgument("rawInput", input);
+                CPH.SetArgument("rawInputEscaped", input);
+
+                // Register the rest of parameters
+                foreach (var datum in Data)
+                {
+                    CPH.SetArgument(string.Format("minichat.{0}", datum.Key), datum.Value);
+                }
+
+                EnsureCustomRewardEventRegistered(service, rewardName);
+                TriggerCustomRewardEvent(service, rewardName);
+            })
+            .On(SocketService.eventLiveEventRecieved, delegate (string Event, Dictionary<string, object> Data)
+            {
+                var jsonData = JsonConvert.SerializeObject(Data);
+                if (!Data.ContainsKey("Service") || !Data.ContainsKey("Type"))
+                {
+                    Logger.Error("Wrong event structure. Service and Type are required", jsonData);
+                    return;
+                }
+                string service = Data["Service"].ToString();
+                string type = Data["Type"].ToString();
+                string user = Data["UserName"].ToString();
+
+                // These two are the most important and stable
+                CPH.SetArgument("userName", user);
+                CPH.SetArgument("user", user);
+
+                // Register the rest of parameters
+                foreach (var datum in Data)
+                {
+                    CPH.SetArgument(string.Format("minichat.{0}", datum.Key), datum.Value.ToString());
+                }
+
                 EnsureCustomEventRegistered(service, type);
                 TriggerCustomEvent(service, type);
             })
-            .On(SocketService.eventConnected, delegate (string Event, Dictionary<string, string> Data)
+            .On(SocketService.eventConnected, delegate (string Event, Dictionary<string, object> Data)
             {
                 Logger.Debug("Connected to the socket. Waiting for the message");
+                sendMessage("MiniChat", "🟢 Streamer.bot подключен к MiniChat");
             })
-            .On(SocketService.eventReconnected, delegate (string Event, Dictionary<string, string> Data)
+            .On(SocketService.eventReconnected, delegate (string Event, Dictionary<string, object> Data)
             {
                 Logger.Debug("Connection to the socket has been restored");
+                sendMessage("MiniChat", "🟡 Streamer.bot восстановил подключение");
+            })
+            .On(SocketService.eventDisconnected, delegate (string Event, Dictionary<string, object> Data)
+            {
+                Logger.Debug("Disconnected from the socket");
+                sendMessage("MiniChat", "🔴 Streamer.bot потерял соединение");
             });
 
-                Logger.Debug("Ready to start socket service");
+        Logger.Debug("Ready to start socket service");
         Socket.Start();
         Logger.Debug("Socket service has stoped his work");
         return true;
@@ -142,11 +326,41 @@ public class CPHInline
         CPH.TriggerCodeEvent(customEventName);
     }
 
+    private void TriggerCustomRewardEvent(string service, string rewardName)
+    {
+        string customEventName = string.Format("MiniChat.{0}.Reward.{1}", service, rewardName);
+        Logger.Debug("Triggering", customEventName);
+        CPH.TriggerCodeEvent(customEventName);
+    }
+
     private void RegisterCustomEvent(string service, string type)
     {
         string eventName = string.Format("{0}: {1}", service, type);
         string eventCode = string.Format("MiniChat.{0}.{1}", service, type);
         CPH.RegisterCustomTrigger(eventName, eventCode, new[] { "Minichat", service });
+    }
+
+    private void RegisterCustomRewardEvent(string service, string rewardName)
+    {
+        string eventName = string.Format("{0}: {1}", service, rewardName);
+        string eventCode = string.Format("MiniChat.{0}.Reward.{1}", service, rewardName);
+        CPH.RegisterCustomTrigger(eventName, eventCode, new[] { "Minichat", service, "Rewards" });
+    }
+
+    private void EnsureCustomRewardEventRegistered(string service, string rewardName)
+    {
+        string memorizedRewardEvents = CPH.GetGlobalVar<string>(keyRewardEventCollection);
+        if (string.IsNullOrEmpty(memorizedRewardEvents))
+            memorizedRewardEvents = "[]";
+
+        var eventCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(memorizedRewardEvents);
+        if (IsCustomEventMemorized(eventCollection, service, rewardName))
+            return;
+
+        eventCollection.Add(new KeyValuePair<string, string>(service, rewardName));
+
+        CPH.SetGlobalVar(keyRewardEventCollection, JsonConvert.SerializeObject(eventCollection));
+        RegisterCustomRewardEvent(service, rewardName);
     }
 
     private void EnsureCustomEventRegistered(string service, string type)
@@ -188,11 +402,25 @@ public class CPHInline
             RegisterCustomEvent(eventPair.Key, eventPair.Value);
         }
     }
+
+    private void LoadAndRegisterCustomRewardEvents()
+    {
+        List<KeyValuePair<string, string>> eventCollection = new List<KeyValuePair<string, string>>();
+        string memorizedRewardEvents = CPH.GetGlobalVar<string>(keyRewardEventCollection);
+        if (!string.IsNullOrEmpty(memorizedRewardEvents))
+            eventCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(memorizedRewardEvents);
+
+        foreach (var eventPair in eventCollection)
+        {
+            RegisterCustomRewardEvent(eventPair.Key, eventPair.Value);
+        }
+    }
 }
 
 public class SocketService
 {
-    private const string host = "ws://localhost:4848/Chat"; //TODO: Grab from args or globals
+    public const int DefaultPort = 4848;
+    private int Port { get; set; }
     private ClientWebSocket Socket { get; set; }
     private PrefixedLogger Logger { get; set; }
 
@@ -203,12 +431,20 @@ public class SocketService
     public const string eventConnected = "socket.connected";
     public const string eventDisconnected = "socket.disconnected";
     public const string eventReconnected = "socket.reconnected";
-    public const string eventRecieved = "socket.event.recieved";
+    public const string eventLiveEventRecieved = "socket.event.live.recieved";
+    public const string eventMessageEventRecieved = "socket.event.message.recieved";
+    public const string eventRewardEventRecieved = "socket.event.reward.recieved";
 
-    public SocketService(EventObserver observer, PrefixedLogger logger)
+    public SocketService(EventObserver observer, PrefixedLogger logger, int port = DefaultPort)
     {
         Logger = logger;
         Observer = observer;
+        Port = port;
+    }
+
+    private string getUrl()
+    {
+        return string.Format("ws://localhost:{0}/Chat", Port);
     }
 
     public SocketService On(string EventName, EventObserver.Handler handler)
@@ -241,7 +477,7 @@ public class SocketService
         try
         {
             Socket = new ClientWebSocket();
-            Socket.ConnectAsync(new Uri(host), CancellationToken.None).GetAwaiter().GetResult();
+            Socket.ConnectAsync(new Uri(getUrl()), CancellationToken.None).GetAwaiter().GetResult();
 
             var buf = new ArraySegment<byte>(new byte[BufferSize]);
             
@@ -263,19 +499,10 @@ public class SocketService
                 else
                 {
                     string rawMessage = Encoding.UTF8.GetString(buf.Array, 0, result.Count);
-                    var typeAwareEvent = JsonConvert.DeserializeObject<TypeAwareEvent>(rawMessage);
-                    if (typeAwareEvent == null || typeAwareEvent.Type != "Live")
-                        continue;
+                    var eventDataPair = EventTypeLocator.BuildExportableEvent(rawMessage);
+                    if (eventDataPair.Value == null) continue;
 
-                    var eventData = JsonConvert.DeserializeObject<LiveEvent>(rawMessage).Data;
-                    Logger.Debug("New Event", eventData.Type, eventData.Service, eventData.UserName);
-                       
-                    Observer.Dispatch(eventRecieved, new Dictionary<string, string>()
-                    {
-                        { "Service", eventData.Service },
-                        { "Type", eventData.Type },
-                        { "UserName", eventData.UserName }
-                    });
+                    Observer.Dispatch(eventDataPair.Key, eventDataPair.Value.ToDictionary());
                 }
             }
         }
@@ -291,82 +518,246 @@ public class SocketService
         return ConnectAndProccess(updatedSleep);
     }
 
+    public class EventTypeLocator
+    {
+        public static KeyValuePair<string, IDataExtracter> BuildExportableEvent(string rawMessage)
+        {
+            var result = new KeyValuePair<string, IDataExtracter> ("", null);
+            var typeAwareEvent = JsonConvert.DeserializeObject<TypeAwareEvent>(rawMessage);
+            if (typeAwareEvent == null) return result;
+
+            var data = (ServiceAwarePayload)typeAwareEvent.Data;
+            if (data.Service == "Twitch" || data.Service == "YouTube") return result;
+
+            if (typeAwareEvent.Type == "Live")
+            {
+                var eventData = JsonConvert.DeserializeObject<LiveEvent>(rawMessage).Data;
+                return new KeyValuePair<string, IDataExtracter>(eventLiveEventRecieved, eventData);
+            }
+            else if (typeAwareEvent.Type == "Message")
+            {
+                var eventData = JsonConvert.DeserializeObject<MessageEvent>(rawMessage).Data;
+                var vkPlayRewardEvent = VKPlayRewardEvent.TryConvertToRewardEvent(eventData);
+                if (vkPlayRewardEvent != null)
+                    return new KeyValuePair<string, IDataExtracter>(eventRewardEventRecieved, vkPlayRewardEvent);
+                return new KeyValuePair<string, IDataExtracter>(eventMessageEventRecieved, eventData);
+            }
+
+            return result;
+        }
+    }
+
     public class TypeAwareEvent
     {
         public string Type { get; set; }
+
+        public object Data = new ServiceAwarePayload();
+    }
+
+    public class ServiceAwarePayload: IDataExtracter
+    {
+        public string Service { get; set; }
+
+        public Dictionary<string, object> ToDictionary()
+        {
+            return new Dictionary<string, object> { { "Service", Service } };
+        }
     }
 
     public class LiveEvent: TypeAwareEvent
     {
-        public LiveEventPayload Data = new LiveEventPayload();
+        public new LiveEventPayload Data = new LiveEventPayload();
     }
 
-    public class LiveEventPayload: TypeAwareEvent
+    public class MessageEvent: TypeAwareEvent
     {
-        public string Service { get; set; }
+        public new MessageEventPayload Data = new MessageEventPayload();
+    }
+
+    public interface IDataExtracter
+    {
+        Dictionary<string, object> ToDictionary();
+    }
+
+    public class MessageEventPayload: ServiceAwarePayload, IDataExtracter
+    {
+        public string GUID { get; set; }
         public string UserID { get; set; }
         public string UserName { get; set; }
 
         public Dictionary<string, string> Avatar = new Dictionary<string, string>();
+        public List<MessageKit> MessageKit { get; set; }
+
+        public new Dictionary<string, object> ToDictionary()
+        {
+            return new Dictionary<string, object>
+            {
+                { "Service", Service },
+                { "GUID", GUID },
+                { "UserID", UserID },
+                { "UserName", UserName },
+                { "Message", GetMessageText() },
+            };
+        }
+
+        public string GetMessageText()
+        {
+            foreach (var kit in MessageKit)
+            {
+                if (kit.Type == "Text")
+                {
+                    return kit.Data["Text"].ToString();
+                }
+            }
+
+            return null;
+        }
+    }
+
+    public class MessageKit
+    {
+        public string Type { get; set; }
+        public Dictionary<string, object> Data { get; set; }
+    }
+
+    public class VKPlayRewardEvent: IDataExtracter
+    {
+        public static VKPlayRewardEvent TryConvertToRewardEvent(MessageEventPayload data)
+        {
+            if (data.Service != "VKPlay" || data.UserName != "ChatBot") return null;
+            if (data.MessageKit.Count == 0 || !data.MessageKit[0].Data.ContainsKey("Text")) return null;
+
+            //play_code получает награду: Кинуть флешку за 1\n
+            var messageText = data.MessageKit[0].Data["Text"].ToString();
+            if (!messageText.Contains("получает награду")) return null;
+
+            var messageSplit = messageText.Split(new string[] { " получает награду: " }, StringSplitOptions.None);
+            string userName = messageSplit[0] ?? "Unknown";
+            var inputSplit = messageSplit[1].Split('\n');
+            var rewardSplit = inputSplit[0].Split(new string[] { " за " }, StringSplitOptions.None);
+
+            return new VKPlayRewardEvent { 
+                Username = userName,
+                RewardName = rewardSplit[0],
+                RewardPrice = Convert.ToInt32(rewardSplit[1]),
+                RewardInput = inputSplit[1] ?? "",
+            };
+        }
+
+        public string Username { get; set; }
+        public string RewardName { get; set; }
+        public int RewardPrice { get; set; }
+
+        public string RewardInput { get; set; }
+
+        public Dictionary<string, object> ToDictionary()
+        {
+            return new Dictionary<string, object>
+            {
+                { "Service", "VKPlay" },
+                { "UserName", Username },
+                { "RewardName", RewardName },
+                { "RewardPrice", RewardPrice },
+                { "RewardInput", RewardInput },
+            };
+        }
+    }
+
+    public class LiveEventPayload: ServiceAwarePayload, IDataExtracter
+    {
+        public string Type { get; set; }
+        public string UserID { get; set; }
+        public string UserName { get; set; }
+
+        public Dictionary<string, string> Avatar = new Dictionary<string, string>();
+
+        public new Dictionary<string, object> ToDictionary()
+        {
+            return new Dictionary<string, object>
+            {
+                { "Type", Type },
+                { "UserID", UserID },
+                { "UserName", UserName },
+            };
+        }
     }
 }
 
 public class ApiService
 {
-    private const string hostname = "http://localhost:4848/api";
+    public const int DefaultPort = 4848;
+    private int Port { get; set; }
 
-    public static class Voice
-    {
-        public const string
-            Maxim = "Maxim",
-            Tatyana = "Tatyana",
-            Alice = "Alice",
-            Marusia = "Marusia",
-            Svetlana = "Svetlana",
-            Dmitry = "Dmitry",
-            Ermilov = "Ermilov",
-            Zahar = "Zahar",
-            Jane = "Jane",
-            Alyss = "Alyss",
-            Omazh = "Omazh",
-            Oksana = "Oksana";
-    }
+    public readonly List<string> availableVoices = new List<string> {
+        "Alice",
+        "Marusia",
+        "Maxim",
+        "Tatyana",
+        "Svetlana",
+        "Dmitry",
+        "Ermilov",
+        "Zahar",
+        "Jane",
+        "Alyss",
+        "Omazh",
+        "Oksana",
+    };
 
     private PrefixedLogger Logger { get; set; }
     private HttpClient Client { get; set; }
 
-    public ApiService(PrefixedLogger logger)
+    public ApiService(PrefixedLogger logger, int port = DefaultPort)
     {
         Logger = logger;
         Client = new HttpClient();
+        Port = port;
+    }
+
+    private string getUrl()
+    {
+        return string.Format("http://localhost:{0}/api", Port);
     }
 
     public void Speak(string message, string voice)
     {
         Logger.Debug("Got speach request", voice, message);
+        if (!availableVoices.Contains(voice))
+            throw new Exception("Unavailable voice requested");
 
-        var request = new SpeakRequest()
+        var request = new Request()
         {
-            Data = new SpeakRequestData()
+            Type = "Speak",
+            Data = new Dictionary<string, string>()
             {
-                Voice = voice,
-                Message = message
+                { "Voice", voice },
+                { "Message", message },
             }
         };
 
-        Client.POST(hostname, JsonConvert.SerializeObject(request));
+        Client.POST(getUrl(), JsonConvert.SerializeObject(request));
     }
 
-    private class SpeakRequest
+    public void SendMessage(string message, string service, string username)
     {
-        public string Type = "Speak";
-        public SpeakRequestData Data = new SpeakRequestData();
+        Logger.Debug("Got send message request", service, message);
+        var request = new Request()
+        {
+            Type = "Message",
+            Data = new Dictionary<string, string>
+            {
+                { "Service", service },
+                { "UserName", username },
+                { "Message", message },
+            }
+        };
+
+        Client.POST(getUrl(), JsonConvert.SerializeObject(request));
     }
 
-    private class SpeakRequestData
+    private class Request
     {
-        public string Voice { get; set; }
-        public string Message { get; set; }
+        public string Type { get; set; }
+        public object Data { get; set; }
     }
 }
 
@@ -426,7 +817,7 @@ public class HttpClient
 
 public class EventObserver
 {
-    public delegate void Handler(string Event, Dictionary<string, string> Data = null);
+    public delegate void Handler(string Event, Dictionary<string, object> Data = null);
     private Dictionary<string, List<Handler>> Handlers { get; set; }
 
     public EventObserver()
@@ -441,7 +832,7 @@ public class EventObserver
         Handlers[EventName].Add(handler);
         return this;
     }
-    public void Dispatch(string EventName, Dictionary<string, string> Data = null)
+    public void Dispatch(string EventName, Dictionary<string, object> Data = null)
     {
         if (!Handlers.ContainsKey(EventName) || Handlers[EventName].Count == 0)
             return;
@@ -460,7 +851,7 @@ public class PrefixedLogger
 
     public PrefixedLogger(IInlineInvokeProxy _CPH)
     {
-        this.cph = _CPH;
+        cph = _CPH;
     }
     public void WebError(WebException e)
     {
