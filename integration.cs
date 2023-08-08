@@ -21,7 +21,7 @@ public class CPHInline
     {
         {
             "VKPlay",
-            new string[]
+            new []
             {
                 "Message",
                 "Follow",
@@ -32,7 +32,7 @@ public class CPHInline
         },
         {
             "Boosty",
-            new string[]
+            new []
             {
                 "Message",
                 "Follow",
@@ -43,7 +43,7 @@ public class CPHInline
         },
         {
             "Trovo",
-            new string[]
+            new []
             {
                 "Message",
                 "Follow",
@@ -56,7 +56,7 @@ public class CPHInline
         },
         {
             "VK",
-            new string[]
+            new []
             {
                 "Message",
                 "Follow",
@@ -66,13 +66,25 @@ public class CPHInline
         },
         {
             "WASD",
-            new string[]
+            new []
             {
                 "Message",
                 "Follow",
                 "UnFollow",
                 "Subscription",
             }
+        },
+        {
+            "DonationAlerts",
+            new [] { "Donation" }
+        },
+        {
+            "DonatePay",
+            new [] { "Donation" }
+        },
+        {
+            "DonateStream",
+            new [] { "Donation" }
         },
     };
 
@@ -109,6 +121,13 @@ public class CPHInline
     public void Dispatch()
     {
         Socket.Close();
+    }
+
+    public bool ForceQuit()
+    {
+        Socket.Close();
+
+        return true;
     }
 
     public bool Execute()
@@ -218,18 +237,18 @@ public class CPHInline
     private bool IntegrationLoop()
     {
         Socket
-            .On(SocketService.eventMessageEventRecieved, delegate (string Event, Dictionary<string, object> Data)
+            .On(SocketService.eventMessageEventRecieved, delegate (string Event, Dictionary<string, string> Data)
             {
                 var jsonData = JsonConvert.SerializeObject(Data);
-                if (!Data.ContainsKey("Service") || !Data.ContainsKey("Message") || !Data.ContainsKey("UserName"))
+                if (!Data.ContainsKey("Data.Service") || !Data.ContainsKey("Data.MessageKit.0.Data.Text") || !Data.ContainsKey("Data.UserName"))
                 {
                     Logger.Error("Wrong event structure. Service, Message and UserName are required", jsonData);
                     return;
                 }
 
-                string service = Data["Service"].ToString();
-                string message = Data["Message"].ToString();
-                string user = Data["UserName"].ToString();
+                string service = Data["Data.Service"].ToString();
+                string message = Data["Data.MessageKit.0.Data.Text"].ToString(); //TODO Refactor that shit
+                string user = Data["Data.UserName"].ToString();
 
                 CPH.SetArgument("userName", user);
                 CPH.SetArgument("user", user);
@@ -244,24 +263,25 @@ public class CPHInline
                 EnsureCustomEventRegistered(service, "Message");
                 TriggerCustomEvent(service, "Message");
             })
-            .On(SocketService.eventRewardEventRecieved, delegate (string Event, Dictionary<string, object> Data)
+            .On(SocketService.eventRewardEventRecieved, delegate (string Event, Dictionary<string, string> Data)
             {
                 var jsonData = JsonConvert.SerializeObject(Data);
-                if (!Data.ContainsKey("Service") || !Data.ContainsKey("RewardName") || !Data.ContainsKey("UserName"))
+                if (!Data.ContainsKey("Data.Service") || !Data.ContainsKey("Data.Name") || !Data.ContainsKey("Data.UserName"))
                 {
                     Logger.Error("Wrong event structure. Service, RewardName and UserName are required", jsonData);
                     return;
                 }
 
-                string service = Data["Service"].ToString();
-                string rewardName = Data["RewardName"].ToString();
-                string user = Data["UserName"].ToString();
-                string input = Data["RewardInput"].ToString();
+                string service = Data["Data.Service"].ToString();
+                string rewardName = Data["Data.Name"].ToString();
+                string user = Data["Data.UserName"].ToString();
+                string input = Data["Data.Message"].ToString();
 
                 CPH.SetArgument("userName", user);
                 CPH.SetArgument("user", user);
                 CPH.SetArgument("rawInput", input);
                 CPH.SetArgument("rawInputEscaped", input);
+                CPH.SetArgument("message", input);
 
                 // Register the rest of parameters
                 foreach (var datum in Data)
@@ -272,17 +292,17 @@ public class CPHInline
                 EnsureCustomRewardEventRegistered(service, rewardName);
                 TriggerCustomRewardEvent(service, rewardName);
             })
-            .On(SocketService.eventLiveEventRecieved, delegate (string Event, Dictionary<string, object> Data)
+            .On(SocketService.eventLiveEventRecieved, delegate (string Event, Dictionary<string, string> Data)
             {
                 var jsonData = JsonConvert.SerializeObject(Data);
-                if (!Data.ContainsKey("Service") || !Data.ContainsKey("Type"))
+                if (!Data.ContainsKey("Data.Service") || !Data.ContainsKey("Data.Type") || !Data.ContainsKey("Data.UserName"))
                 {
-                    Logger.Error("Wrong event structure. Service and Type are required", jsonData);
+                    Logger.Error("Wrong event structure. Service, UserName and Type are required", jsonData);
                     return;
                 }
-                string service = Data["Service"].ToString();
-                string type = Data["Type"].ToString();
-                string user = Data["UserName"].ToString();
+                string service = Data["Data.Service"].ToString();
+                string type = Data["Data.Type"].ToString();
+                string user = Data["Data.UserName"].ToString();
 
                 // These two are the most important and stable
                 CPH.SetArgument("userName", user);
@@ -297,17 +317,17 @@ public class CPHInline
                 EnsureCustomEventRegistered(service, type);
                 TriggerCustomEvent(service, type);
             })
-            .On(SocketService.eventConnected, delegate (string Event, Dictionary<string, object> Data)
+            .On(SocketService.eventConnected, delegate (string Event, Dictionary<string, string> Data)
             {
                 Logger.Debug("Connected to the socket. Waiting for the message");
                 sendMessage("MiniChat", "🟢 Streamer.bot подключен к MiniChat");
             })
-            .On(SocketService.eventReconnected, delegate (string Event, Dictionary<string, object> Data)
+            .On(SocketService.eventReconnected, delegate (string Event, Dictionary<string, string> Data)
             {
                 Logger.Debug("Connection to the socket has been restored");
                 sendMessage("MiniChat", "🟡 Streamer.bot восстановил подключение");
             })
-            .On(SocketService.eventDisconnected, delegate (string Event, Dictionary<string, object> Data)
+            .On(SocketService.eventDisconnected, delegate (string Event, Dictionary<string, string> Data)
             {
                 Logger.Debug("Disconnected from the socket");
                 sendMessage("MiniChat", "🔴 Streamer.bot потерял соединение");
@@ -426,6 +446,8 @@ public class SocketService
 
     private EventObserver Observer { get; set; }
 
+    private bool IsForceClosed = false;
+
     private const int BufferSize = 3072;
 
     public const string eventConnected = "socket.connected";
@@ -464,6 +486,7 @@ public class SocketService
         {
             if (Socket == null)
                 return;
+            IsForceClosed = true;
             Socket.Abort();
             Socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
             Socket = null;
@@ -502,7 +525,7 @@ public class SocketService
                     var eventDataPair = EventTypeLocator.BuildExportableEvent(rawMessage);
                     if (eventDataPair.Value == null) continue;
 
-                    Observer.Dispatch(eventDataPair.Key, eventDataPair.Value.ToDictionary());
+                    Observer.Dispatch(eventDataPair.Key, eventDataPair.Value);
                 }
             }
         }
@@ -512,123 +535,63 @@ public class SocketService
             Observer.Dispatch(eventDisconnected);
         }
 
+        if (IsForceClosed)
+        {
+            return null;
+        }
+
         int updatedSleep = Math.Max(sleep, 1000) * 2;
         Logger.Debug(string.Format("Next attempt in {0} seconds", updatedSleep / 1000));
-
         return ConnectAndProccess(updatedSleep);
     }
 
     public class EventTypeLocator
     {
-        public static KeyValuePair<string, IDataExtracter> BuildExportableEvent(string rawMessage)
+        public static KeyValuePair<string, Dictionary<string, string>> BuildExportableEvent(string rawMessage)
         {
-            var result = new KeyValuePair<string, IDataExtracter> ("", null);
-            var typeAwareEvent = JsonConvert.DeserializeObject<TypeAwareEvent>(rawMessage);
-            if (typeAwareEvent == null) return result;
+            var result = new KeyValuePair<string, Dictionary<string, string>> ("",null);
+            var rootEvent = JsonConvert.DeserializeObject<RootEvent>(rawMessage);
+            if (rootEvent == null) return result;
 
-            var data = (ServiceAwarePayload)typeAwareEvent.Data;
-            if (data.Service == "Twitch" || data.Service == "YouTube") return result;
+            string service = rootEvent.Data.ContainsKey("Service") ? rootEvent.Data["Service"].ToString() : null;
+            if (service != null && (service == "Twitch" || service == "YouTube")) return result;
 
-            if (typeAwareEvent.Type == "Live")
+            var data = InlineRootEvent(rootEvent);
+            var vkPlayRewardEvent = TryConvertToVkPlayRewardEvent(data);
+            if (vkPlayRewardEvent != null) data = vkPlayRewardEvent;
+
+            string targetEventCode = "";
+            switch (data["Type"])
             {
-                var eventData = JsonConvert.DeserializeObject<LiveEvent>(rawMessage).Data;
-                return new KeyValuePair<string, IDataExtracter>(eventLiveEventRecieved, eventData);
-            }
-            else if (typeAwareEvent.Type == "Message")
-            {
-                var eventData = JsonConvert.DeserializeObject<MessageEvent>(rawMessage).Data;
-                var vkPlayRewardEvent = VKPlayRewardEvent.TryConvertToRewardEvent(eventData);
-                if (vkPlayRewardEvent != null)
-                    return new KeyValuePair<string, IDataExtracter>(eventRewardEventRecieved, vkPlayRewardEvent);
-                return new KeyValuePair<string, IDataExtracter>(eventMessageEventRecieved, eventData);
-            }
-
-            return result;
-        }
-    }
-
-    public class TypeAwareEvent
-    {
-        public string Type { get; set; }
-
-        public object Data = new ServiceAwarePayload();
-    }
-
-    public class ServiceAwarePayload: IDataExtracter
-    {
-        public string Service { get; set; }
-
-        public Dictionary<string, object> ToDictionary()
-        {
-            return new Dictionary<string, object> { { "Service", Service } };
-        }
-    }
-
-    public class LiveEvent: TypeAwareEvent
-    {
-        public new LiveEventPayload Data = new LiveEventPayload();
-    }
-
-    public class MessageEvent: TypeAwareEvent
-    {
-        public new MessageEventPayload Data = new MessageEventPayload();
-    }
-
-    public interface IDataExtracter
-    {
-        Dictionary<string, object> ToDictionary();
-    }
-
-    public class MessageEventPayload: ServiceAwarePayload, IDataExtracter
-    {
-        public string GUID { get; set; }
-        public string UserID { get; set; }
-        public string UserName { get; set; }
-
-        public Dictionary<string, string> Avatar = new Dictionary<string, string>();
-        public List<MessageKit> MessageKit { get; set; }
-
-        public new Dictionary<string, object> ToDictionary()
-        {
-            return new Dictionary<string, object>
-            {
-                { "Service", Service },
-                { "GUID", GUID },
-                { "UserID", UserID },
-                { "UserName", UserName },
-                { "Message", GetMessageText() },
-            };
-        }
-
-        public string GetMessageText()
-        {
-            foreach (var kit in MessageKit)
-            {
-                if (kit.Type == "Text")
-                {
-                    return kit.Data["Text"].ToString();
-                }
+                case "Live":
+                    targetEventCode = data["Data.Type"]?.ToString() == "Reward" ? eventRewardEventRecieved : eventLiveEventRecieved;
+                    break;
+                case "Message":
+                    targetEventCode = eventMessageEventRecieved;
+                    break;
             }
 
-            return null;
+            if (string.IsNullOrEmpty(targetEventCode))
+                return result;
+
+            return new KeyValuePair<string, Dictionary<string, string>>(targetEventCode, data);
         }
-    }
 
-    public class MessageKit
-    {
-        public string Type { get; set; }
-        public Dictionary<string, object> Data { get; set; }
-    }
-
-    public class VKPlayRewardEvent: IDataExtracter
-    {
-        public static VKPlayRewardEvent TryConvertToRewardEvent(MessageEventPayload data)
+        private static Dictionary<string, string> TryConvertToVkPlayRewardEvent(Dictionary<string, string> data)
         {
-            if (data.Service != "VKPlay" || data.UserName != "ChatBot") return null;
-            if (data.MessageKit.Count == 0 || !data.MessageKit[0].Data.ContainsKey("Text")) return null;
+            if (data["Type"] != "Message" || data["Data.Service"]?.ToString() != "VKPlay" || data["Data.UserName"]?.ToString() != "ChatBot") return null;
+            string messageText = "";
+            for (int i = 0; data.ContainsKey(string.Format("Data.MessageKit.{0}.Type", i)); i++)
+            {
+                if (data[string.Format("Data.MessageKit.{0}.Type", i)]?.ToString() != "Text")
+                    continue;
+                messageText = data[string.Format("Data.MessageKit.{0}.Data.Text", i)]?.ToString();
+                break;
+            }
 
+            if (string.IsNullOrEmpty(messageText)) return null;
             //play_code получает награду: Кинуть флешку за 1\n
-            var messageText = data.MessageKit[0].Data["Text"].ToString();
+
             if (!messageText.Contains("получает награду")) return null;
 
             var messageSplit = messageText.Split(new string[] { " получает награду: " }, StringSplitOptions.None);
@@ -636,50 +599,99 @@ public class SocketService
             var inputSplit = messageSplit[1].Split('\n');
             var rewardSplit = inputSplit[0].Split(new string[] { " за " }, StringSplitOptions.None);
 
-            return new VKPlayRewardEvent { 
-                Username = userName,
-                RewardName = rewardSplit[0],
-                RewardPrice = Convert.ToInt32(rewardSplit[1]),
-                RewardInput = inputSplit[1] ?? "",
-            };
-        }
-
-        public string Username { get; set; }
-        public string RewardName { get; set; }
-        public int RewardPrice { get; set; }
-
-        public string RewardInput { get; set; }
-
-        public Dictionary<string, object> ToDictionary()
-        {
-            return new Dictionary<string, object>
+            return new Dictionary<string, string>
             {
-                { "Service", "VKPlay" },
-                { "UserName", Username },
-                { "RewardName", RewardName },
-                { "RewardPrice", RewardPrice },
-                { "RewardInput", RewardInput },
+                { "Type", "Live" },
+                { "Data.Type", "Reward" },
+                { "Data.CurrencyType", "VKPlayPoints" },
+                { "Data.Name", rewardSplit[0] },
+                { "Data.UserName", messageSplit[0] },
+                { "Data.Price", rewardSplit[1] },
+                { "Data.Count", "1" },
+                { "Data.Amount", rewardSplit[1] },
+                { "Data.Message", inputSplit[1] ?? "" },
+                { "Data.Service", data["Data.Service"] },
+                { "Data.GUID", data["Data.GUID"] ?? "" },
+                { "Data.Date", data["Data.Date"] ?? "" },
             };
         }
+
+        private static Dictionary<string, string> InlineRootEvent(RootEvent e)
+        {
+            var result = new Dictionary<string, string>
+            {
+                { "Type", e.Type },
+            };
+
+            InlineRootDictionaryData("Data", e.Data, ref result);
+
+            return result;
+        }
+
+        private static void InlineRootDictionaryData(string prefix, Dictionary<string, object> data, ref Dictionary<string, string> result)
+        {
+            foreach (var item in data)
+            {
+                InlineObject(string.Format("{0}.{1}", prefix, item.Key), item.Value, ref result);
+            }
+        }
+
+        private static void InlineObject(string key, object data, ref Dictionary<string, string> result)
+        {
+            if (data == null)
+                return;
+
+            var listStrData = data as List<string>;
+            if (listStrData != null)
+            {
+                for (int i = 0; i < listStrData.Count; i++)
+                    result.Add(string.Format("{0}.{1}", key, i), listStrData[i]);
+                return;
+            }
+
+            var stringData = data as string;
+            if (stringData != null)
+            {
+                result.Add(key, stringData);
+                return;
+            }
+
+            if (data is Newtonsoft.Json.Linq.JArray jArrayData)
+                data = jArrayData.ToObject<List<object>>();
+            var listObjData = data as List<object>;
+            if (listObjData != null)
+            {
+                for (int i = 0; i < listObjData.Count; i++)
+                    InlineObject(string.Format("{0}.{1}", key, i), listObjData[i], ref result);
+                return;
+            }
+
+            if (data is Newtonsoft.Json.Linq.JObject jObjectData)
+                data = jObjectData.ToObject<Dictionary<string, object>>();
+            var dictData = data as Dictionary<string, object>;
+            if (dictData != null)
+            {
+                InlineRootDictionaryData(key, (Dictionary<string, object>)data, ref result);
+                return;
+            }
+
+            if (data is DateTime dateData)
+                result.Add(key, dateData.ToString());
+            else if (data is Boolean boolData)
+                result.Add(key, boolData ? "true" : "false");
+            else if (data is double doubleData)
+                result.Add(key, doubleData.ToString());
+            else if (data is int intData)
+                result.Add(key, intData.ToString());
+        }
+
     }
 
-    public class LiveEventPayload: ServiceAwarePayload, IDataExtracter
+    public class RootEvent
     {
         public string Type { get; set; }
-        public string UserID { get; set; }
-        public string UserName { get; set; }
 
-        public Dictionary<string, string> Avatar = new Dictionary<string, string>();
-
-        public new Dictionary<string, object> ToDictionary()
-        {
-            return new Dictionary<string, object>
-            {
-                { "Type", Type },
-                { "UserID", UserID },
-                { "UserName", UserName },
-            };
-        }
+        public Dictionary<string, object> Data = new Dictionary<string, object>();
     }
 }
 
@@ -817,7 +829,7 @@ public class HttpClient
 
 public class EventObserver
 {
-    public delegate void Handler(string Event, Dictionary<string, object> Data = null);
+    public delegate void Handler(string Event, Dictionary<string, string> Data = null);
     private Dictionary<string, List<Handler>> Handlers { get; set; }
 
     public EventObserver()
@@ -832,7 +844,7 @@ public class EventObserver
         Handlers[EventName].Add(handler);
         return this;
     }
-    public void Dispatch(string EventName, Dictionary<string, object> Data = null)
+    public void Dispatch(string EventName, Dictionary<string, string> Data = null)
     {
         if (!Handlers.ContainsKey(EventName) || Handlers[EventName].Count == 0)
             return;
