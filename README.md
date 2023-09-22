@@ -1,3 +1,5 @@
+:no_entry: [DEPRECATED] Проект больше не публикуется в открытый репозиторий github. Все версии и инструкции доступны на странице документации https://docs.play-code.live/minichat
+
 # MiniChat + Streamer.bot = ♥️
 
 [![GitHub All Releases](https://img.shields.io/github/downloads/play-code-live/streamer.bot-minichat/total.svg)](https://github.com/play-code-live/streamer.bot-minichat/releases) [![GitHub release](https://img.shields.io/github/release/play-code-live/streamer.bot-minichat.svg)](https://github.com/play-code-live/streamer.bot-minichat/releases)
